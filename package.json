@@ -1,0 +1,22 @@
+{
+  "name": "umc_10",
+  "version": "1.0.0",
+  "description": "UMC 10기 Node.js 실습 레포입니다.",
+  "main": "index.js",
+  "scripts": {
+    "start:dev": "nodemon --watch '*.ts' --exec tsx ./src/app.ts",
+    "build": "tsc"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "express": "^5.2.1",
+    "nodemon": "^3.1.14",
+    "tsx": "^4.21.0"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.6"
+  }
+}
