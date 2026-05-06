@@ -1,8 +1,8 @@
-import { pool } from "../../../db.config.js";
+import { prisma } from "../../../db.config.js";
 
 export const addUser = async (data: {
   email: string;
-  password: string;
+  password?: string;
   name: string;
   gender: string;
   birth: Date;
@@ -10,95 +10,64 @@ export const addUser = async (data: {
   detailAddress: string;
   phoneNumber: string;
 }) => {
-  const conn = await pool.getConnection();
+  // 1. 이미 존재하는 이메일인지 확인
+  const user = await prisma.user.findFirst({
+    where: {
+      email: data.email,
+    },
+  });
 
-  try {
-    const [confirm]: any = await conn.query(
-      "SELECT * FROM user WHERE email = ?",
-      [data.email]
-    );
-
-    if (Array.isArray(confirm) && confirm.length > 0) {
-      return null;
-    }
-
-    const [result]: any = await conn.query(
-  `INSERT INTO user
-  (email, password, name, gender, birth, address, detail_address, phone_number)
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-  [
-    data.email,
-    data.password,
-    data.name,
-    data.gender,
-    data.birth,
-    data.address,
-    data.detailAddress,
-    data.phoneNumber,
-  ]
-);
-
-    return result.insertId;
-  } catch (err) {
-    throw new Error(`사용자 추가 중 오류가 발생했습니다: ${err}`);
-  } finally {
-    conn.release();
+  if (user) {
+    return null;
   }
+
+  // 2. 새로운 사용자 생성
+  const createdUser = await prisma.user.create({
+    data: {
+      email: data.email,
+      password: data.password,
+      name: data.name,
+      gender: data.gender,
+      birth: data.birth,
+      address: data.address,
+      detailAddress: data.detailAddress,
+      phoneNumber: data.phoneNumber,
+    },
+  });
+
+  return createdUser.id;
 };
 
 export const setPreference = async (
   userId: number,
   foodCategoryId: number
 ) => {
-  const conn = await pool.getConnection();
-
-  try {
-    await conn.query(
-      `INSERT INTO user_favor_category
-      (user_id, food_category_id)
-      VALUES (?, ?)`,
-      [userId, foodCategoryId]
-    );
-  } catch (err) {
-    throw new Error(`선호 카테고리 추가 중 오류가 발생했습니다: ${err}`);
-  } finally {
-    conn.release();
-  }
+  await prisma.userFavorCategory.create({
+    data: {
+      userId,
+      foodCategoryId,
+    },
+  });
 };
 
 export const getUser = async (userId: number) => {
-  const conn = await pool.getConnection();
-
-  try {
-    const [rows]: any = await conn.query(
-      "SELECT * FROM user WHERE id = ?",
-      [userId]
-    );
-
-    return rows[0];
-  } catch (err) {
-    throw new Error(`사용자 조회 중 오류가 발생했습니다: ${err}`);
-  } finally {
-    conn.release();
-  }
+  return await prisma.user.findFirstOrThrow({
+    where: {
+      id: userId,
+    },
+  });
 };
 
 export const getUserPreferencesByUserId = async (userId: number) => {
-  const conn = await pool.getConnection();
-
-  try {
-    const [rows]: any = await conn.query(
-      `SELECT fc.id, fc.name
-       FROM user_favor_category ufc
-       JOIN food_category fc ON ufc.food_category_id = fc.id
-       WHERE ufc.user_id = ?`,
-      [userId]
-    );
-
-    return rows;
-  } catch (err) {
-    throw new Error(`선호 카테고리 조회 중 오류가 발생했습니다: ${err}`);
-  } finally {
-    conn.release();
-  }
+  return await prisma.userFavorCategory.findMany({
+    where: {
+      userId,
+    },
+    include: {
+      foodCategory: true,
+    },
+    orderBy: {
+      foodCategoryId: "asc",
+    },
+  });
 };

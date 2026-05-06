@@ -1,20 +1,11 @@
-import { pool } from "../../../db.config.js";
+import { prisma } from "../../../db.config.js";
 
 export const findStoreById = async (storeId: number) => {
-  const conn = await pool.getConnection();
-
-  try {
-    const [rows]: any = await conn.query(
-      "SELECT * FROM stores WHERE id = ?",
-      [storeId]
-    );
-
-    return rows[0] || null;
-  } catch (err) {
-    throw new Error(`가게 조회 중 오류가 발생했습니다: ${err}`);
-  } finally {
-    conn.release();
-  }
+  return await prisma.store.findFirst({
+    where: {
+      id: storeId,
+    },
+  });
 };
 
 export const addMission = async (data: {
@@ -23,114 +14,162 @@ export const addMission = async (data: {
   description: string;
   rewardPoint: number;
 }) => {
-  const conn = await pool.getConnection();
+  const createdMission = await prisma.mission.create({
+    data: {
+      storeId: data.storeId,
+      title: data.title,
+      description: data.description,
+      rewardPoint: data.rewardPoint,
+    },
+  });
 
-  try {
-    const [result]: any = await conn.query(
-      `INSERT INTO missions
-      (store_id, title, description, reward_point)
-      VALUES (?, ?, ?, ?)`,
-      [data.storeId, data.title, data.description, data.rewardPoint]
-    );
-
-    return result.insertId;
-  } catch (err) {
-    throw new Error(`미션 추가 중 오류가 발생했습니다: ${err}`);
-  } finally {
-    conn.release();
-  }
+  return createdMission.id;
 };
 
 export const findMissionById = async (missionId: number) => {
-  const conn = await pool.getConnection();
-
-  try {
-    const [rows]: any = await conn.query(
-      "SELECT * FROM missions WHERE id = ?",
-      [missionId]
-    );
-
-    return rows[0] || null;
-  } catch (err) {
-    throw new Error(`미션 조회 중 오류가 발생했습니다: ${err}`);
-  } finally {
-    conn.release();
-  }
+  return await prisma.mission.findFirst({
+    where: {
+      id: missionId,
+    },
+  });
 };
 
 export const findUserById = async (userId: number) => {
-  const conn = await pool.getConnection();
-
-  try {
-    const [rows]: any = await conn.query(
-      "SELECT * FROM user WHERE id = ?",
-      [userId]
-    );
-
-    return rows[0] || null;
-  } catch (err) {
-    throw new Error(`사용자 조회 중 오류가 발생했습니다: ${err}`);
-  } finally {
-    conn.release();
-  }
+  return await prisma.user.findFirst({
+    where: {
+      id: userId,
+    },
+  });
 };
 
 export const findUserMission = async (
   userId: number,
   missionId: number
 ) => {
-  const conn = await pool.getConnection();
-
-  try {
-    const [rows]: any = await conn.query(
-      `SELECT * FROM user_missions
-       WHERE user_id = ? AND mission_id = ? AND status = 'IN_PROGRESS'`,
-      [userId, missionId]
-    );
-
-    return rows[0] || null;
-  } catch (err) {
-    throw new Error(`도전 중인 미션 조회 중 오류가 발생했습니다: ${err}`);
-  } finally {
-    conn.release();
-  }
+  return await prisma.userMission.findFirst({
+    where: {
+      userId,
+      missionId,
+      status: "IN_PROGRESS",
+    },
+  });
 };
 
 export const addUserMission = async (data: {
   userId: number;
   missionId: number;
 }) => {
-  const conn = await pool.getConnection();
+  const createdUserMission = await prisma.userMission.create({
+    data: {
+      userId: data.userId,
+      missionId: data.missionId,
+      status: "IN_PROGRESS",
+    },
+  });
 
-  try {
-    const [result]: any = await conn.query(
-      `INSERT INTO user_missions
-      (user_id, mission_id, status)
-      VALUES (?, ?, 'IN_PROGRESS')`,
-      [data.userId, data.missionId]
-    );
-
-    return result.insertId;
-  } catch (err) {
-    throw new Error(`미션 도전 추가 중 오류가 발생했습니다: ${err}`);
-  } finally {
-    conn.release();
-  }
+  return createdUserMission.id;
 };
 
 export const findUserMissionById = async (userMissionId: number) => {
-  const conn = await pool.getConnection();
+  return await prisma.userMission.findFirst({
+    where: {
+      id: userMissionId,
+    },
+  });
+};
 
-  try {
-    const [rows]: any = await conn.query(
-      "SELECT * FROM user_missions WHERE id = ?",
-      [userMissionId]
-    );
+export const getMissionsByStoreId = async (
+  storeId: number,
+  cursor: number
+) => {
+  return await prisma.mission.findMany({
+    where: {
+      storeId,
+      id: {
+        gt: cursor,
+      },
+    },
+    select: {
+      id: true,
+      title: true,
+      description: true,
+      rewardPoint: true,
+      createdAt: true,
+      store: {
+        select: {
+          id: true,
+          name: true,
+          address: true,
+        },
+      },
+    },
+    orderBy: {
+      id: "asc",
+    },
+    take: 5,
+  });
+};
+export const getInProgressMissionsByUserId = async (
+  userId: number,
+  cursor: number
+) => {
+  return await prisma.userMission.findMany({
+    where: {
+      userId,
+      status: "IN_PROGRESS",
+      id: {
+        gt: cursor,
+      },
+    },
+    select: {
+      id: true,
+      status: true,
+      startedAt: true,
+      mission: {
+        select: {
+          id: true,
+          title: true,
+          description: true,
+          rewardPoint: true,
+          store: {
+            select: {
+              id: true,
+              name: true,
+              address: true,
+            },
+          },
+        },
+      },
+    },
+    orderBy: {
+      id: "asc",
+    },
+    take: 5,
+  });
+};
 
-    return rows[0] || null;
-  } catch (err) {
-    throw new Error(`도전 미션 조회 중 오류가 발생했습니다: ${err}`);
-  } finally {
-    conn.release();
-  }
+export const findInProgressUserMission = async (
+  userId: number,
+  missionId: number
+) => {
+  return await prisma.userMission.findFirst({
+    where: {
+      userId,
+      missionId,
+      status: "IN_PROGRESS",
+    },
+  });
+};
+
+export const completeUserMission = async (userMissionId: number) => {
+  return await prisma.userMission.update({
+    where: {
+      id: userMissionId,
+    },
+    data: {
+      status: "COMPLETED",
+      completedAt: new Date(),
+      updatedAt: new Date(),
+    },
+  });
 };

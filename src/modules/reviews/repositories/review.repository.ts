@@ -1,58 +1,79 @@
-import { pool } from "../../../db.config.js";
+import { prisma } from "../../../db.config.js";
 
 export const findStoreById = async (storeId: number) => {
-  const conn = await pool.getConnection();
-
-  try {
-    const [rows]: any = await conn.query(
-      "SELECT * FROM stores WHERE id = ?",
-      [storeId]
-    );
-
-    return rows[0] || null;
-  } catch (err) {
-    throw new Error(`가게 조회 중 오류가 발생했습니다: ${err}`);
-  } finally {
-    conn.release();
-  }
+  return await prisma.store.findFirst({
+    where: {
+      id: storeId,
+    },
+  });
 };
 
 export const addReview = async (data: {
   storeId: number;
   rating: number;
   content: string;
+  userId?: number;
 }) => {
-  const conn = await pool.getConnection();
+  const createdReview = await prisma.review.create({
+    data: {
+      storeId: data.storeId,
 
-  try {
-    const [result]: any = await conn.query(
-      `INSERT INTO reviews
-      (store_id, rating, content)
-      VALUES (?, ?, ?)`,
-      [data.storeId, data.rating, data.content]
-    );
+      // 기존 5주차 리뷰 API는 userId를 받지 않았기 때문에
+      // 임시로 userId가 없으면 1번 사용자를 사용하도록 처리
+      userId: data.userId ?? 1,
 
-    return result.insertId;
-  } catch (err) {
-    throw new Error(`리뷰 추가 중 오류가 발생했습니다: ${err}`);
-  } finally {
-    conn.release();
-  }
+      rating: data.rating,
+      content: data.content,
+    },
+  });
+
+  return createdReview.id;
 };
 
 export const findReviewById = async (reviewId: number) => {
-  const conn = await pool.getConnection();
+  return await prisma.review.findFirst({
+    where: {
+      id: reviewId,
+    },
+  });
+};
 
-  try {
-    const [rows]: any = await conn.query(
-      "SELECT * FROM reviews WHERE id = ?",
-      [reviewId]
-    );
+export const getReviewsByUserId = async (
+  userId: number,
+  cursor: number
+) => {
+  return await prisma.review.findMany({
+    where: {
+      userId,
 
-    return rows[0] || null;
-  } catch (err) {
-    throw new Error(`리뷰 조회 중 오류가 발생했습니다: ${err}`);
-  } finally {
-    conn.release();
-  }
+      // cursor보다 큰 id를 가진 리뷰만 조회
+      id: {
+        gt: cursor,
+      },
+    },
+
+    select: {
+      id: true,
+      rating: true,
+      content: true,
+      createdAt: true,
+
+      // 리뷰가 작성된 가게 정보도 함께 가져옴
+      store: {
+        select: {
+          id: true,
+          name: true,
+          address: true,
+        },
+      },
+    },
+
+    // id가 작은 순서대로 조회
+    orderBy: {
+      id: "asc",
+    },
+
+    // 한 번에 5개만 조회
+    take: 5,
+  });
 };

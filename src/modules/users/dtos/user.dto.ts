@@ -33,7 +33,7 @@ export const responseFromUser = ({
   return {
     email: user.email,
     name: user.name,
-    preferCategory: preferences.map((preference) => preference.name),
+    preferCategory: preferences.map((preference) => preference.foodCategory.name),
   };
 };
 
