@@ -6,10 +6,17 @@ import {
   findUserById,
   findUserMission,
   findUserMissionById,
+  getMissionsByStoreId,
+  getInProgressMissionsByUserId,
+  findInProgressUserMission,
+  completeUserMission,
 } from "../repositories/mission.repository.js";
 import {
   responseFromMission,
   responseFromUserMission,
+  responseFromStoreMissions,
+  responseFromInProgressMissions,
+  responseFromCompletedMission,
 } from "../dtos/mission.dto.js";
 
 export const createMission = async (data: {
@@ -67,3 +74,59 @@ export const challengeMission = async (data: {
   return responseFromUserMission(userMission);
 };
 
+export const listStoreMissions = async (
+  storeId: number,
+  cursor: number
+) => {
+  const store = await findStoreById(storeId);
+
+  if (!store) {
+    throw new Error("존재하지 않는 가게입니다.");
+  }
+
+  const missions = await getMissionsByStoreId(storeId, cursor);
+
+  return responseFromStoreMissions(missions);
+};
+
+export const listInProgressMissions = async (
+  userId: number,
+  cursor: number
+) => {
+  const user = await findUserById(userId);
+
+  if (!user) {
+    throw new Error("존재하지 않는 사용자입니다.");
+  }
+
+  const missions = await getInProgressMissionsByUserId(userId, cursor);
+
+  return responseFromInProgressMissions(missions);
+};
+
+export const completeMission = async (
+  userId: number,
+  missionId: number
+) => {
+  const user = await findUserById(userId);
+
+  if (!user) {
+    throw new Error("존재하지 않는 사용자입니다.");
+  }
+
+  const mission = await findMissionById(missionId);
+
+  if (!mission) {
+    throw new Error("존재하지 않는 미션입니다.");
+  }
+
+  const userMission = await findInProgressUserMission(userId, missionId);
+
+  if (!userMission) {
+    throw new Error("진행 중인 미션이 아닙니다.");
+  }
+
+  const completedMission = await completeUserMission(userMission.id);
+
+  return responseFromCompletedMission(completedMission);
+};

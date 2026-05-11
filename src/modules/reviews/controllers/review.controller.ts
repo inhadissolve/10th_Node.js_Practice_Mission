@@ -1,7 +1,10 @@
 import { Request, Response, NextFunction } from "express";
 import { StatusCodes } from "http-status-codes";
 import { bodyToReview } from "../dtos/review.dto.js";
-import { createReview } from "../services/review.service.js";
+import {
+  createReview,
+  listMyReviews,
+} from "../services/review.service.js";
 
 export const handleCreateReview = async (
   req: Request,
@@ -24,6 +27,35 @@ export const handleCreateReview = async (
     res.status(StatusCodes.CREATED).json({
       result: review,
     });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const handleListMyReviews = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const userId = Number(req.params.userId);
+
+    const cursor =
+      typeof req.query.cursor === "string"
+        ? Number(req.query.cursor)
+        : 0;
+
+    if (Number.isNaN(userId)) {
+      throw new Error("userId는 숫자여야 합니다.");
+    }
+
+    if (Number.isNaN(cursor)) {
+      throw new Error("cursor는 숫자여야 합니다.");
+    }
+
+    const reviews = await listMyReviews(userId, cursor);
+
+    res.status(StatusCodes.OK).json(reviews);
   } catch (error) {
     next(error);
   }
