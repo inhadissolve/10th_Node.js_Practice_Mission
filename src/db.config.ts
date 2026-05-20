@@ -1,5 +1,5 @@
 import "dotenv/config";
-import { PrismaClient } from "./generated/prisma/client.js";
+import { PrismaClient } from "../src/generated/prisma/client.js";
 import { PrismaMariaDb } from "@prisma/adapter-mariadb";
 
 const adapter = new PrismaMariaDb({
@@ -13,5 +13,5 @@ const adapter = new PrismaMariaDb({
 
 export const prisma = new PrismaClient({
   adapter,
-  log: ["query", "info", "warn", "error"],
+  log: ["query", "info", "error", "warn"],
 });

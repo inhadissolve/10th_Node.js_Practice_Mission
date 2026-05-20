@@ -1,23 +1,16 @@
-import dotenv from "dotenv";
-import express, { Express, NextFunction, Request, Response } from "express";
+import express from "express";
 import cors from "cors";
 import morgan from "morgan";
 import cookieParser from "cookie-parser";
 import swaggerUi from "swagger-ui-express";
-import path from "path";
 import fs from "fs";
+import path from "path";
 
-import { RegisterRoutes } from "./generated/routes.js";
-import { AppError } from "./common/errors/app.error.js";
+import { handleUserSignUp } from "./modules/users/controllers/user.controller";
 
-dotenv.config();
+const app = express();
+const PORT = process.env.PORT || 3000;
 
-const app: Express = express();
-const port = process.env.PORT || 3000;
-
-/**
- * 공통 미들웨어 설정
- */
 app.use(cors());
 app.use(morgan("dev"));
 app.use(cookieParser());
@@ -25,50 +18,24 @@ app.use(express.static("public"));
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
-/**
- * 기본 서버 확인용 API
- */
-app.get("/", (req: Request, res: Response) => {
-  res.send("Hello World! This is TypeScript Server!");
+// Swagger UI 연결
+// TSOA가 생성한 dist/swagger.json을 읽어서 /docs에서 보여준다.
+// 단, src/generated/routes.ts의 RegisterRoutes는 사용하지 않는다.
+const swaggerPath = path.resolve("dist/swagger.json");
+
+if (fs.existsSync(swaggerPath)) {
+  const swaggerFile = JSON.parse(fs.readFileSync(swaggerPath, "utf8"));
+  app.use("/docs", swaggerUi.serve, swaggerUi.setup(swaggerFile));
+}
+
+// 기본 확인용 라우트
+app.get("/", (req, res) => {
+  res.send("Hello World!");
 });
 
-/**
- * Tsoa가 자동 생성한 routes 등록
- */
-const router = express.Router();
+// 기존 Express 핸들러 방식 유지
+app.post("/api/v1/users/signup", handleUserSignUp);
 
-RegisterRoutes(router);
-
-app.use("/api/v1", router);
-
-/**
- * 전역 에러 핸들러
- */
-app.use((err: AppError, req: Request, res: Response, next: NextFunction) => {
-  if (res.headersSent) {
-    return next(err);
-  }
-
-  res.status(err.statusCode || 500).json({
-    resultType: "FAIL",
-    error: {
-      errorCode: err.errorCode || "UNKNOWN",
-      reason: err.message || "서버 오류가 발생했습니다.",
-      data: err.data || null,
-    },
-    success: null,
-  });
+app.listen(PORT, () => {
+  console.log(`[server]: Server is running at http://localhost:${PORT}`);
 });
-
-/**
- * 서버 실행
- */
-app.listen(port, () => {
-  console.log(`[server]: Server is running at http://localhost:${port}`);
-});
-
-const swaggerFile = JSON.parse(
-  fs.readFileSync(path.resolve("dist/swagger.json"), "utf8")
-);
-
-app.use("/docs", swaggerUi.serve, swaggerUi.setup(swaggerFile));
