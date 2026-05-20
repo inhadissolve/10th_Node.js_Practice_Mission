@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <title>회원가입 API 테스트</title>
+</head>
+<body>
+  <h1>회원가입 테스트</h1>
+
+  <button id="signupSuccessButton">가입 요청 성공</button>
+  <button id="signupFailButton">가입 요청 실패</button>
+
+  <script>
+    const API_URL = "http://localhost:3000";
+
+    document.getElementById("signupSuccessButton").onclick = async () => {
+      const userData = {
+        email: `test_${Date.now()}@test.com`,
+        name: "UMC",
+        gender: "여성",
+        birth: "2000-01-01",
+        address: "서울시",
+        detailAddress: "UMC구 챌린저동 화이팅아파트",
+        phoneNumber: "010-1234-5678",
+        preferences: [1]
+      };
+
+      await callAPI("/api/v1/users/signup", userData);
+    };
+
+    document.getElementById("signupFailButton").onclick = async () => {
+  const userData = {
+    email: "test_1779287723429@test.com",
+    name: "UMC",
+    gender: "여성",
+    birth: "2000-01-01",
+    address: "서울시",
+    detailAddress: "UMC구 챌린저동 화이팅아파트",
+    phoneNumber: "010-1234-5678",
+    preferences: [1]
+  };
+
+  await callAPI("/api/v1/users/signup", userData);
+};
+
+    async function callAPI(path, data) {
+      console.log("[요청]", path, data);
+
+      try {
+        const response = await fetch(API_URL + path, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify(data)
+        });
+
+        const responseData = await response.json();
+
+        if (!response.ok) {
+          throw responseData;
+        }
+
+        console.log("[응답] 성공:", responseData);
+      } catch (error) {
+        console.error("[응답] 실패:", error);
+      }
+    }
+  </script>
+</body>
+</html>
