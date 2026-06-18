@@ -47,7 +47,8 @@ jobs:
           mkdir -p artifact
           cp -r dist artifact/dist
           cp -r node_modules artifact/node_modules
-          cp package.json package-lock.json artifact/
+          cp -r prisma artifact/prisma
+          cp package.json package-lock.json prisma.config.ts artifact/
           tar -czf artifact.tgz -C artifact .
 
       - name: Upload artifact
@@ -107,6 +108,11 @@ jobs:
           EC2_DOT_ENV: ${{ secrets.EC2_DOT_ENV }}
         run: |
           printf '%s' "$EC2_DOT_ENV" | base64 -w 0 | ssh target 'base64 -d > /opt/app/umc10th/incoming/.env && chmod 600 /opt/app/umc10th/incoming/.env'
+
+      - name: Apply database migrations
+        shell: bash
+        run: |
+          ssh target "cd /opt/app/umc10th/incoming && source /home/ubuntu/.nvm/nvm.sh && npm run migrate:deploy"
 
       - name: Activate release
         shell: bash

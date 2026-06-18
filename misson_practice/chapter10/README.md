@@ -121,14 +121,18 @@ sudo mysql -u root
 ```
 
 ```sql
-ALTER USER 'root'@'localhost'
-  IDENTIFIED WITH mysql_native_password BY '<STRONG_PASSWORD>';
-CREATE DATABASE umc_10th;
+CREATE DATABASE umc_10th
+  CHARACTER SET utf8mb4
+  COLLATE utf8mb4_unicode_ci;
+CREATE USER 'umc_app'@'localhost' IDENTIFIED BY '<STRONG_PASSWORD>';
+GRANT ALL PRIVILEGES ON umc_10th.* TO 'umc_app'@'localhost';
+FLUSH PRIVILEGES;
 EXIT;
 ```
 
 - [ ] MySQL 서비스가 `active`인지 확인
 - [ ] `umc_10th` 데이터베이스 생성
+- [ ] `umc_app` 전용 사용자 생성 및 접속 확인
 - [ ] 비밀번호를 공개 문서나 저장소에 기록하지 않기
 
 ## 6. GitHub Actions Secrets 설정
@@ -147,10 +151,10 @@ GitHub 저장소의 `Settings → Secrets and variables → Actions`에서 다�
 
 ```dotenv
 PORT=3000
-DATABASE_URL=mysql://root:<PASSWORD>@localhost:3306/umc_10th
+DATABASE_URL=mysql://umc_app:<PASSWORD>@localhost:3306/umc_10th
 DB_HOST=localhost
 DB_PORT=3306
-DB_USER=root
+DB_USER=umc_app
 DB_PASSWORD=<PASSWORD>
 DB_NAME=umc_10th
 PASSPORT_GOOGLE_CLIENT_ID=<GOOGLE_CLIENT_ID>
@@ -185,9 +189,10 @@ JWT_SECRET=<LONG_RANDOM_SECRET>
 2. SSH 개인 키와 known hosts 설정
 3. `/opt/app/umc10th/incoming`으로 파일 전송
 4. Secret을 이용해 런타임 `.env` 생성
-5. 기존 `current`를 `previous`로 옮기고 새 릴리스를 `current`로 전환
-6. `umc10th.service` 등록 및 재시작
-7. systemd 상태와 `http://127.0.0.1:3000/` 응답 확인
+5. Prisma migration 적용
+6. 기존 `current`를 `previous`로 옮기고 새 릴리스를 `current`로 전환
+7. `umc10th.service` 등록 및 재시작
+8. systemd 상태와 `http://127.0.0.1:3000/` 응답 확인
 
 ## 8. 첫 배포
 
