@@ -78,10 +78,10 @@ callbackURL:
 PASSPORT_GOOGLE_CALLBACK_URL=http://localhost:3000/oauth2/callback/google
 ```
 
-EC2 실습 환경에서는 다음과 같이 설정한다.
+배포 환경에서는 Google OAuth 정책에 맞춰 HTTPS 도메인을 사용한다.
 
 ```dotenv
-PASSPORT_GOOGLE_CALLBACK_URL=http://<EC2_PUBLIC_IP>:3000/oauth2/callback/google
+PASSPORT_GOOGLE_CALLBACK_URL=https://<DOMAIN>/oauth2/callback/google
 ```
 
 > 실제 서비스에서는 도메인과 HTTPS를 적용한 `https://api.example.com/oauth2/callback/google` 형태를 사용한다.
@@ -90,11 +90,12 @@ PASSPORT_GOOGLE_CALLBACK_URL=http://<EC2_PUBLIC_IP>:3000/oauth2/callback/google
 
 ### 5-1. 인스턴스와 네트워크
 
-- [ ] Ubuntu EC2 인스턴스 생성
-- [ ] 탄력적 IP 연결
-- [ ] 보안 그룹에서 SSH 22번 포트를 내 IP에만 허용
-- [ ] 실습용 API 3000번 포트 허용
-- [ ] SSH 접속 확인
+- [x] Ubuntu EC2 인스턴스 생성
+- [x] 탄력적 IP 연결
+- [x] 보안 그룹에서 SSH 22번 포트를 내 IP에만 허용
+- [x] Nginx용 HTTP 80, HTTPS 443 포트 허용
+- [x] 애플리케이션 3000번 외부 규칙 제거
+- [x] SSH 접속 확인
 
 운영 환경에서는 애플리케이션의 3000번 포트를 직접 공개하지 않고, Nginx가 80/443번 요청을 받아 내부 3000번 포트로 전달하도록 구성하는 것이 좋다.
 
@@ -130,10 +131,19 @@ FLUSH PRIVILEGES;
 EXIT;
 ```
 
-- [ ] MySQL 서비스가 `active`인지 확인
-- [ ] `umc_10th` 데이터베이스 생성
-- [ ] `umc_app` 전용 사용자 생성 및 접속 확인
-- [ ] 비밀번호를 공개 문서나 저장소에 기록하지 않기
+- [x] MySQL 서비스가 `active`인지 확인
+- [x] `umc_10th` 데이터베이스 생성
+- [x] `umc_app` 전용 사용자 생성 및 접속 확인
+- [x] 비밀번호를 공개 문서나 저장소에 기록하지 않기
+
+메모리가 약 1GiB인 인스턴스에서 Prisma migration과 MySQL을 함께 실행할 수 있도록 1GiB swap을 추가했다.
+
+```bash
+sudo fallocate -l 1G /swapfile
+sudo chmod 600 /swapfile
+sudo mkswap /swapfile
+sudo swapon /swapfile
+```
 
 ## 6. GitHub Actions Secrets 설정
 
@@ -159,7 +169,7 @@ DB_PASSWORD=<PASSWORD>
 DB_NAME=umc_10th
 PASSPORT_GOOGLE_CLIENT_ID=<GOOGLE_CLIENT_ID>
 PASSPORT_GOOGLE_CLIENT_SECRET=<GOOGLE_CLIENT_SECRET>
-PASSPORT_GOOGLE_CALLBACK_URL=http://<EC2_PUBLIC_IP>:3000/oauth2/callback/google
+PASSPORT_GOOGLE_CALLBACK_URL=https://<DOMAIN>/oauth2/callback/google
 JWT_SECRET=<LONG_RANDOM_SECRET>
 ```
 
@@ -208,35 +218,43 @@ sudo journalctl -u umc10th -n 100 --no-pager
 curl http://127.0.0.1:3000/
 ```
 
-외부에서도 확인한다.
+외부에서는 Nginx와 HTTPS 도메인을 통해 확인한다.
 
 ```text
-http://<EC2_PUBLIC_IP>:3000/
+https://<DOMAIN>/
 ```
 
-- [ ] Actions build 성공 화면 기록
-- [ ] Actions deploy 성공 화면 기록
-- [ ] EC2 systemd `active` 화면 기록
-- [ ] 외부 API 응답 화면 기록
+- [x] Actions build 성공
+- [x] Actions deploy 성공
+- [x] EC2 systemd `active` 확인
+- [x] 외부 HTTPS API 응답 확인
+
+### Nginx와 HTTPS
+
+DuckDNS 서브도메인을 탄력적 IP에 연결하고 Nginx가 80/443 요청을 내부 3000번 포트로 전달하도록 구성했다. Certbot으로 TLS 인증서를 발급했으며 `certbot renew --dry-run`도 성공했다.
+
+```text
+Client → HTTPS :443 → Nginx → HTTP 127.0.0.1:3000 → Node.js
+```
 
 ## 9. 배포 환경에서 Google 로그인 수정
 
 Google Cloud Console의 OAuth Client 설정에서 승인된 리디렉션 URI를 추가한다.
 
 ```text
-http://<EC2_PUBLIC_IP>:3000/oauth2/callback/google
+https://<DOMAIN>/oauth2/callback/google
 ```
 
 그다음 브라우저에서 아래 주소로 접속한다.
 
 ```text
-http://<EC2_PUBLIC_IP>:3000/oauth2/login/google
+https://<DOMAIN>/oauth2/login/google
 ```
 
-- [ ] Google 로그인 화면으로 이동
-- [ ] 로그인 후 EC2 콜백 주소로 복귀
-- [ ] Access Token과 Refresh Token 응답 확인
-- [ ] Access Token으로 `/mypage` 호출 성공
+- [x] Google 로그인 화면으로 이동
+- [x] 로그인 후 HTTPS 콜백 주소로 복귀
+- [x] Access Token과 Refresh Token 응답 확인
+- [x] Access Token으로 `/mypage` 호출 성공
 
 ## 10. 실습 인증 이미지 계획
 
@@ -288,7 +306,47 @@ Google Strategy의 callback URL이 `http://localhost:3000`으로 하드코딩되
 
 **해결**
 
-`PASSPORT_GOOGLE_CALLBACK_URL` 환경변수를 추가하고 Google Cloud Console에도 EC2 콜백 URI를 등록한다.
+`PASSPORT_GOOGLE_CALLBACK_URL` 환경변수를 추가하고 Google Cloud Console에도 HTTPS 도메인 콜백 URI를 등록했다.
+
+### 이슈 4: Repository secrets가 없어 빌드 환경변수가 비어 있음
+
+**문제**
+
+GitHub Actions의 Prisma generate 단계에서 `DATABASE_URL`을 찾을 수 없었다. 확인 결과 Repository secrets가 등록되지 않은 상태였다.
+
+**해결**
+
+실습 저장소의 Repository secrets에 `EC2_HOST`, `EC2_PORT`, `EC2_USER`, `EC2_SSH_KEY`, `EC2_DOT_ENV`를 등록했다.
+
+### 이슈 5: Prisma가 MySQL 인증 오류를 다른 plugin 오류로 표시함
+
+**문제**
+
+DB 비밀번호 불일치 상황에서 Prisma가 `Unknown authentication plugin sha256_password`를 출력해 원인 파악이 어려웠다.
+
+**해결**
+
+`umc_app` 비밀번호를 재설정하고 같은 값을 `DATABASE_URL`, `DB_PASSWORD`에 반영했다. MySQL 인증 방식은 `mysql_native_password`로 통일했다.
+
+### 이슈 6: 작은 EC2에서 migration 중 DB 연결 실패
+
+**문제**
+
+MySQL과 Node.js가 실행 중인 약 1GiB 인스턴스의 가용 메모리가 100MiB 미만이었고 swap도 없었다. Prisma migration 중 일시적으로 `P1001` 연결 실패가 발생했다.
+
+**해결**
+
+기존 EBS 볼륨에 1GiB swap을 만들고 migration을 다시 실행했다. 이후 migration, systemd 재시작, HTTP 검증이 모두 통과했다.
+
+### 이슈 7: Google OAuth는 공인 IP 기반 HTTP callback을 허용하지 않음
+
+**문제**
+
+Google OAuth는 localhost를 제외한 HTTP callback과 원시 IP host를 허용하지 않는다.
+
+**해결**
+
+DuckDNS 도메인, Nginx, Certbot을 적용하고 Google Cloud Console에 HTTPS callback URI를 등록했다.
 
 ## 12. 시니어 미션: 무중단 배포
 
