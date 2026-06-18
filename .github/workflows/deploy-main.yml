@@ -1,0 +1,157 @@
+name: deploy-main
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-main
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Create build environment
+        shell: bash
+        env:
+          EC2_DOT_ENV: ${{ secrets.EC2_DOT_ENV }}
+        run: printf '%s' "$EC2_DOT_ENV" > .env
+
+      - name: Generate and build
+        run: npm run build
+
+      - name: Keep production dependencies only
+        run: npm prune --omit=dev
+
+      - name: Pack artifact
+        shell: bash
+        run: |
+          mkdir -p artifact
+          cp -r dist artifact/dist
+          cp -r node_modules artifact/node_modules
+          cp -r prisma artifact/prisma
+          cp package.json package-lock.json prisma.config.ts artifact/
+          tar -czf artifact.tgz -C artifact .
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-artifact
+          path: artifact.tgz
+          if-no-files-found: error
+          retention-days: 1
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: app-artifact
+
+      - name: Extract artifact
+        run: |
+          mkdir -p artifact
+          tar -xzf artifact.tgz -C artifact
+
+      - name: Configure SSH
+        shell: bash
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_PORT: ${{ secrets.EC2_PORT }}
+          EC2_USER: ${{ secrets.EC2_USER }}
+          EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$EC2_SSH_KEY" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -p "$EC2_PORT" -H "$EC2_HOST" >> ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+          cat >> ~/.ssh/config <<EOF
+          Host target
+              HostName $EC2_HOST
+              Port $EC2_PORT
+              User $EC2_USER
+              IdentityFile ~/.ssh/id_rsa
+              IdentitiesOnly yes
+              StrictHostKeyChecking yes
+          EOF
+
+      - name: Copy artifact to EC2
+        shell: bash
+        run: |
+          ssh target 'sudo mkdir -p /opt/app/umc10th && sudo chown -R ubuntu:ubuntu /opt/app/umc10th && rm -rf /opt/app/umc10th/incoming && mkdir -p /opt/app/umc10th/incoming'
+          rsync -az --delete artifact/ target:/opt/app/umc10th/incoming/
+
+      - name: Create runtime environment
+        shell: bash
+        env:
+          EC2_DOT_ENV: ${{ secrets.EC2_DOT_ENV }}
+        run: |
+          printf '%s' "$EC2_DOT_ENV" | base64 -w 0 | ssh target 'base64 -d > /opt/app/umc10th/incoming/.env && chmod 600 /opt/app/umc10th/incoming/.env'
+
+      - name: Apply database migrations
+        shell: bash
+        run: |
+          ssh target "cd /opt/app/umc10th/incoming && source /home/ubuntu/.nvm/nvm.sh && npm run migrate:deploy"
+
+      - name: Activate release
+        shell: bash
+        run: |
+          ssh target '
+            set -eu
+            cd /opt/app/umc10th
+            rm -rf previous
+            if [ -d current ]; then mv current previous; fi
+            mv incoming current
+          '
+
+      - name: Configure and restart systemd service
+        shell: bash
+        run: |
+          cat <<'EOF' | ssh target 'sudo tee /etc/systemd/system/umc10th.service > /dev/null'
+          [Unit]
+          Description=UMC 10th Node.js API
+          After=network-online.target mysql.service
+          Wants=network-online.target
+
+          [Service]
+          Type=simple
+          User=ubuntu
+          WorkingDirectory=/opt/app/umc10th/current
+          ExecStart=/bin/bash -lc 'source /home/ubuntu/.nvm/nvm.sh && exec npm start'
+          Restart=always
+          RestartSec=3
+          Environment=NODE_ENV=production
+
+          [Install]
+          WantedBy=multi-user.target
+          EOF
+
+          ssh target 'sudo systemctl daemon-reload && sudo systemctl enable umc10th && sudo systemctl restart umc10th'
+
+      - name: Verify deployment
+        shell: bash
+        run: |
+          ssh target 'sudo systemctl is-active --quiet umc10th'
+          ssh target 'curl --fail --silent --show-error --retry 5 --retry-delay 2 http://127.0.0.1:3000/'
+          ssh target 'sudo systemctl status umc10th --no-pager --lines=30'
